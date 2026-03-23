@@ -3228,9 +3228,9 @@ impl<'ctx> Codegen<'ctx> {
                     let strlen = self.module.get_function("strlen").unwrap();
                     let n = self.builder.build_call(strlen, &[s.into()], "slen").unwrap()
                         .try_as_basic_value().left().unwrap().into_int_value();
-                    Ok(self.builder.build_int_truncate_or_bit_cast(n, self.context.i32_type(), "len").unwrap().into())
+                    return Ok(self.builder.build_int_truncate_or_bit_cast(n, self.context.i32_type(), "len").unwrap().into());
                 }
-                _ => Err("len() requires an array or str value".to_string()),
+                _ => return Err("len() requires an array or str value".to_string()),
             }
         }
 
