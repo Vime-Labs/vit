@@ -907,19 +907,45 @@ fn compile_c_sources(flags: Vec<String>, tmp_prefix: &str) -> Vec<String> {
             .and_then(|s| s.to_str())
             .unwrap_or("shim");
         let obj_path = format!("{}_{}.o", tmp_prefix, stem);
-        let status = process::Command::new("clang")
-            .args(["-c", &flag, "-o", &obj_path])
-            .status()
-            .unwrap_or_else(|e| {
-                eprintln!("error: failed to run clang for '{}': {}", flag, e);
-                process::exit(1);
-            });
+        let mut cmd = process::Command::new("clang");
+        cmd.args(["-c", &flag, "-o", &obj_path]);
+
+        if flag.ends_with("postgres_shim.c") {
+            for inc in postgres_include_dirs() {
+                cmd.arg("-I").arg(inc);
+            }
+        }
+
+        let status = cmd.status().unwrap_or_else(|e| {
+            eprintln!("error: failed to run clang for '{}': {}", flag, e);
+            process::exit(1);
+        });
         if !status.success() {
             eprintln!("error: clang failed to compile '{}'", flag);
             process::exit(1);
         }
         obj_path
     }).collect()
+}
+
+fn postgres_include_dirs() -> Vec<String> {
+    let mut dirs: Vec<String> = Vec::new();
+
+    if let Ok(output) = process::Command::new("pg_config").arg("--includedir").output() {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                dirs.push(path);
+            }
+        }
+    }
+
+    let fallback = "/usr/include/postgresql".to_string();
+    if Path::new(&fallback).exists() && !dirs.contains(&fallback) {
+        dirs.push(fallback);
+    }
+
+    dirs
 }
 
 fn compile(
