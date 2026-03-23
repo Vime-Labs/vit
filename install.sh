@@ -35,7 +35,7 @@ check_dep llc    "llvm (ex: llvm-18)"
 # ── 2. Compilar e instalar o binário ──────────────────────────────────────────
 
 info "Compilando o compilador vit..."
-cargo install --path "$SCRIPT_DIR" --quiet
+RUSTFLAGS="-Awarnings" cargo install --path "$SCRIPT_DIR" --quiet
 success "Binário 'vit' instalado em $(which vit)"
 
 # ── 3. Instalar a stdlib ──────────────────────────────────────────────────────
