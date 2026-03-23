@@ -1072,7 +1072,7 @@ PORT=9090 DATABASE_URL=/data/prod.db ./meu_app
 
 ```bash
 # Clona o repositório e executa o script de instalação:
-git clone https://github.com/SEU_USER/vit
+git clone https://github.com/joaofaugusto/vit
 cd vit
 bash install.sh
 ```
