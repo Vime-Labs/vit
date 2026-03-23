@@ -822,7 +822,7 @@ fn stdlib_dir() -> PathBuf {
 
 /// Resolve `import "path";` and `link "flag";` directives recursively.
 /// - import: inlines the file content (deduped by canonical path)
-///           falls back to ~/.vit/lib/<path> when not found locally
+///           falls back to ~/.vit/lib/<path> (or ~/.vit/lib/<path without lib/>)
 /// - link: appends the flag to `link_flags` (deduped)
 fn resolve_imports(
     source: &str,
@@ -838,14 +838,22 @@ fn resolve_imports(
         if let Some(rest) = trimmed.strip_prefix("import ") {
             let path_str = rest.trim().trim_end_matches(';').trim().trim_matches('"');
 
-            // Search order: local path first, then ~/.vit/lib/<path>
+            // Search order: local path first, then stdlib candidates.
+            // `import "lib/http.vit"` should resolve to ~/.vit/lib/http.vit.
             let local_path = base_dir.join(path_str);
             let full_path = if local_path.exists() {
                 local_path
             } else {
-                let stdlib_path = stdlib_dir().join(path_str);
-                if stdlib_path.exists() {
-                    stdlib_path
+                let stdlib = stdlib_dir();
+                let stdlib_path_direct = stdlib.join(path_str);
+                let stdlib_path_without_lib = path_str
+                    .strip_prefix("lib/")
+                    .map(|p| stdlib.join(p));
+
+                if let Some(path) = stdlib_path_without_lib.as_ref().filter(|p| p.exists()) {
+                    path.clone()
+                } else if stdlib_path_direct.exists() {
+                    stdlib_path_direct
                 } else {
                     local_path // let the error below report the original path
                 }
