@@ -854,6 +854,10 @@ Depende de `lib/net.vit` (importado automaticamente).
 
 #### Tipos
 
+`http_listen_fork()` adiciona concorrencia simples com modelo process-per-connection. Isso combina bem com o estado atual da Vit em Linux porque cada child fica com sua propria memoria, mas mutacoes em globais nao sao compartilhadas entre requests.
+
+`http_listen_fork()` adiciona concorrencia simples com modelo process-per-connection. Isso combina bem com o estado atual da Vit em Linux porque cada child fica com sua propria memoria, mas mutacoes em globais nao sao compartilhadas entre requests.
+
 ```vit
 struct Request {
     method:  str,
@@ -928,6 +932,7 @@ struct Response {
 |--------|-----------|
 | `http_handle(method, path, fn)` | Registra handler |
 | `http_listen(port)` | Inicia loop de atendimento com read/send completos |
+| `http_listen_fork(port)` | Linux-only: processa cada conexão em um processo filho |
 
 `http_listen()` agora faz cleanup automÃ¡tico do buffer bruto da request, do `Request` parseado, do `Response.headers` quando o handler retorna `Response` e das strings temporÃ¡rias alocadas pelos helpers de string durante o handling da request. Isso reduz bastante a pressÃ£o de memÃ³ria em servidores de longa duraÃ§Ã£o sem exigir `defer`.
 

@@ -2114,6 +2114,7 @@ impl<'ctx> Codegen<'ctx> {
     fn declare_net_builtins(&mut self) {
         let i8_ptr  = self.context.i8_type().ptr_type(AddressSpace::default());
         let i32_type = self.context.i32_type();
+        let void_type = self.context.void_type();
 
         // Only declare if not already declared (e.g. via extern fn in source)
         macro_rules! decl {
@@ -2131,6 +2132,9 @@ impl<'ctx> Codegen<'ctx> {
         decl!("recv",       i32_type.fn_type(&[i32_type.into(), i8_ptr.into(), i32_type.into(), i32_type.into()], false));
         decl!("send",       i32_type.fn_type(&[i32_type.into(), i8_ptr.into(), i32_type.into(), i32_type.into()], false));
         decl!("close",      i32_type.fn_type(&[i32_type.into()], false));
+        decl!("fork",       i32_type.fn_type(&[], false));
+        decl!("signal",     i8_ptr.fn_type(&[i32_type.into(), i8_ptr.into()], false));
+        decl!("_exit",      void_type.fn_type(&[i32_type.into()], false));
     }
 
     fn build_tcp_helpers(&mut self) {
@@ -3636,14 +3640,16 @@ impl<'ctx> Codegen<'ctx> {
         }
         // http_listen(port)
         // Starts the accept loop and dispatches requests using the registered route table.
-        if name == "http_listen" {
+        if name == "http_listen" || name == "http_listen_fork" {
             if arguments.len() != 1 {
-                return Err("http_listen() takes 1 argument: port".to_string());
+                return Err(format!("{}() takes 1 argument: port", name));
             }
+            let use_fork = name == "http_listen_fork";
 
             let port_val = self.generate_expression(&arguments[0])?.into_int_value();
 
             let i32_type = self.context.i32_type();
+            let i64_type = self.context.i64_type();
             let i8_type  = self.context.i8_type();
             let i8_ptr   = i8_type.ptr_type(AddressSpace::default());
             let arr64    = i8_ptr.array_type(64);
@@ -3655,6 +3661,9 @@ impl<'ctx> Codegen<'ctx> {
             let free_fn       = self.module.get_function("free").unwrap();
             let req_begin_fn  = self.module.get_function("__vit_req_begin").unwrap();
             let req_end_fn    = self.module.get_function("__vit_req_end").unwrap();
+            let fork_fn       = self.module.get_function("fork").unwrap();
+            let signal_fn     = self.module.get_function("signal").unwrap();
+            let exit_fn       = self.module.get_function("_exit").unwrap();
             let http_read_fn = self.module.get_function("http_read")
                 .ok_or_else(|| "http_listen(): http_read not found - did you import lib/http.vit?".to_string())?;
             let http_send_fn = self.module.get_function("http_send")
@@ -3683,10 +3692,25 @@ impl<'ctx> Codegen<'ctx> {
                 .build_call(tcp_listen_fn, &[port_val.into()], "srv_fd")
                 .unwrap().try_as_basic_value().left().unwrap().into_int_value();
             let srv_slot = self.builder.build_alloca(i32_type, "srv_slot").unwrap();
+            let cli_slot = self.builder.build_alloca(i32_type, "cli_slot").unwrap();
+            let req_slot = self.builder.build_alloca(req_st_type, "req_slot").unwrap();
+            let i_slot = self.builder.build_alloca(i32_type, "i_slot").unwrap();
+            let resp_slot = self.builder.build_alloca(i8_ptr, "resp_slot").unwrap();
             self.builder.build_store(srv_slot, server_fd).unwrap();
+            if use_fork {
+                let sig_ign = self.builder
+                    .build_int_to_ptr(i64_type.const_int(1, false), i8_ptr, "sig_ign")
+                    .unwrap();
+                self.builder.build_call(
+                    signal_fn,
+                    &[i32_type.const_int(17, false).into(), sig_ign.into()],
+                    "sigchld_ign"
+                ).unwrap();
+            }
 
             let current_fn = self.current_function.unwrap();
             let accept_bb  = self.context.append_basic_block(current_fn, "http_accept");
+            let read_bb            = self.context.append_basic_block(current_fn, "http_read");
             let dispatch_check_bb  = self.context.append_basic_block(current_fn, "dispatch_check");
             let dispatch_body_bb   = self.context.append_basic_block(current_fn, "dispatch_body");
             let check_path_bb      = self.context.append_basic_block(current_fn, "check_path");
@@ -3695,6 +3719,21 @@ impl<'ctx> Codegen<'ctx> {
             let dispatch_done_bb   = self.context.append_basic_block(current_fn, "dispatch_done");
             let send_bb            = self.context.append_basic_block(current_fn, "http_send");
             let after_bb           = self.context.append_basic_block(current_fn, "http_after");
+            let fork_parent_check_bb = if use_fork {
+                Some(self.context.append_basic_block(current_fn, "fork_parent_check"))
+            } else { None };
+            let fork_parent_bb = if use_fork {
+                Some(self.context.append_basic_block(current_fn, "fork_parent"))
+            } else { None };
+            let fork_fail_bb = if use_fork {
+                Some(self.context.append_basic_block(current_fn, "fork_fail"))
+            } else { None };
+            let fork_child_bb = if use_fork {
+                Some(self.context.append_basic_block(current_fn, "fork_child"))
+            } else { None };
+            let pid_slot = if use_fork {
+                Some(self.builder.build_alloca(i32_type, "pid_slot").unwrap())
+            } else { None };
 
             self.builder.build_unconditional_branch(accept_bb).unwrap();
 
@@ -3703,10 +3742,61 @@ impl<'ctx> Codegen<'ctx> {
             let client_fd = self.builder
                 .build_call(tcp_accept_fn, &[srv.into()], "cli")
                 .unwrap().try_as_basic_value().left().unwrap().into_int_value();
-            let cli_slot = self.builder.build_alloca(i32_type, "cli_slot").unwrap();
             self.builder.build_store(cli_slot, client_fd).unwrap();
-            self.builder.build_call(req_begin_fn, &[], "").unwrap();
+            if use_fork {
+                let pid = self.builder
+                    .build_call(fork_fn, &[], "pid")
+                    .unwrap().try_as_basic_value().left().unwrap().into_int_value();
+                self.builder.build_store(pid_slot.unwrap(), pid).unwrap();
+                let is_child = self.builder.build_int_compare(
+                    IntPredicate::EQ,
+                    pid,
+                    i32_type.const_zero(),
+                    "is_child"
+                ).unwrap();
+                self.builder.build_conditional_branch(
+                    is_child,
+                    fork_child_bb.unwrap(),
+                    fork_parent_check_bb.unwrap()
+                ).unwrap();
+            } else {
+                self.builder.build_call(req_begin_fn, &[], "").unwrap();
+                self.builder.build_unconditional_branch(read_bb).unwrap();
+            }
 
+            if use_fork {
+                self.builder.position_at_end(fork_parent_check_bb.unwrap());
+                let pid = self.builder.build_load(i32_type, pid_slot.unwrap(), "pid_parent").unwrap().into_int_value();
+                let fork_failed = self.builder.build_int_compare(
+                    IntPredicate::SLT,
+                    pid,
+                    i32_type.const_zero(),
+                    "fork_failed"
+                ).unwrap();
+                self.builder.build_conditional_branch(
+                    fork_failed,
+                    fork_fail_bb.unwrap(),
+                    fork_parent_bb.unwrap()
+                ).unwrap();
+
+                self.builder.position_at_end(fork_parent_bb.unwrap());
+                let cli = self.builder.build_load(i32_type, cli_slot, "cli_parent").unwrap().into_int_value();
+                self.builder.build_call(tcp_close_fn, &[cli.into()], "close_parent").unwrap();
+                self.builder.build_unconditional_branch(accept_bb).unwrap();
+
+                self.builder.position_at_end(fork_fail_bb.unwrap());
+                let cli = self.builder.build_load(i32_type, cli_slot, "cli_fail").unwrap().into_int_value();
+                self.builder.build_call(tcp_close_fn, &[cli.into()], "close_fail").unwrap();
+                self.builder.build_unconditional_branch(accept_bb).unwrap();
+
+                self.builder.position_at_end(fork_child_bb.unwrap());
+                let child_srv = self.builder.build_load(i32_type, srv_slot, "child_srv").unwrap().into_int_value();
+                self.builder.build_call(tcp_close_fn, &[child_srv.into()], "close_child_srv").unwrap();
+                self.builder.build_call(req_begin_fn, &[], "").unwrap();
+                self.builder.build_unconditional_branch(read_bb).unwrap();
+            }
+
+            self.builder.position_at_end(read_bb);
             let buf = self.builder
                 .build_call(http_read_fn, &[client_fd.into()], "rbuf")
                 .unwrap().try_as_basic_value().left().unwrap().into_pointer_value();
@@ -3715,11 +3805,8 @@ impl<'ctx> Codegen<'ctx> {
                 .build_call(http_parse_fn, &[buf.into()], "req_val")
                 .unwrap().try_as_basic_value().left().unwrap();
             self.builder.build_call(free_fn, &[buf.into()], "free_http_buf").unwrap();
-            let req_slot = self.builder.build_alloca(req_st_type, "req_slot").unwrap();
             self.builder.build_store(req_slot, req_val.into_struct_value()).unwrap();
 
-            let i_slot    = self.builder.build_alloca(i32_type, "i_slot").unwrap();
-            let resp_slot = self.builder.build_alloca(i8_ptr, "resp_slot").unwrap();
             self.builder.build_store(i_slot, zero32).unwrap();
             self.builder.build_store(resp_slot, i8_ptr.const_null()).unwrap();
             self.builder.build_unconditional_branch(dispatch_check_bb).unwrap();
@@ -3798,7 +3885,12 @@ impl<'ctx> Codegen<'ctx> {
             self.builder.build_call(http_request_free_fn, &[req_slot.into()], "free_req").unwrap();
             self.builder.build_call(req_end_fn, &[], "").unwrap();
             self.builder.build_call(tcp_close_fn, &[cli.into()], "closed").unwrap();
-            self.builder.build_unconditional_branch(accept_bb).unwrap();
+            if use_fork {
+                self.builder.build_call(exit_fn, &[i32_type.const_zero().into()], "").unwrap();
+                self.builder.build_unreachable().unwrap();
+            } else {
+                self.builder.build_unconditional_branch(accept_bb).unwrap();
+            }
 
             self.builder.position_at_end(after_bb);
             return Ok(i32_type.const_int(0, false).into());
