@@ -148,8 +148,9 @@ fn http_body(req: Request) -> str {
 // http_header(req, name) -> str
 // Returns the value of the named header, or "" if not present.
 fn http_header(req: Request, name: str) -> str {
-    if map_has(req.headers, name) {
-        return map_get(req.headers, name);
+    let headers: map[str, str] = req.headers;
+    if map_has(headers, name) {
+        return map_get(headers, name);
     }
     return "";
 }
