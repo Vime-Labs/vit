@@ -2364,13 +2364,29 @@ impl<'ctx> Codegen<'ctx> {
                     .try_as_basic_value()
                     .left()
                     .ok_or_else(|| format!("http_handle(): handler '{}' returned no value", handler_name))?;
+                let resp_tmp = match resp {
+                    BasicValueEnum::StructValue(sv) => {
+                        let tmp = self.builder.build_alloca(response_type, "resp_tmp").unwrap();
+                        self.builder.build_store(tmp, sv).unwrap();
+                        Some(tmp)
+                    }
+                    _ => None,
+                };
+                let resp_arg_build: BasicMetadataValueEnum = match resp_tmp {
+                    Some(tmp) => tmp.into(),
+                    None => resp.into(),
+                };
                 let built = self.builder
-                    .build_call(http_build_fn, &[resp.into()], "built_resp")
+                    .build_call(http_build_fn, &[resp_arg_build], "built_resp")
                     .unwrap()
                     .try_as_basic_value()
                     .left()
                     .ok_or_else(|| "http_handle(): http_build returned no value".to_string())?;
-                self.builder.build_call(http_response_free_fn, &[resp.into()], "free_resp").unwrap();
+                let resp_arg_free: BasicMetadataValueEnum = match resp_tmp {
+                    Some(tmp) => tmp.into(),
+                    None => resp.into(),
+                };
+                self.builder.build_call(http_response_free_fn, &[resp_arg_free], "free_resp").unwrap();
                 self.builder.build_return(Some(&built)).unwrap();
                 if let Some(bb) = saved_bb {
                     self.builder.position_at_end(bb);
@@ -3996,6 +4012,15 @@ impl<'ctx> Codegen<'ctx> {
             let val = {
                 let param_types = function.get_type().get_param_types();
                 match (val, param_types.get(i)) {
+                    (BasicValueEnum::StructValue(sv), Some(BasicTypeEnum::PointerType(pt))) => {
+                        if let inkwell::types::AnyTypeEnum::StructType(st) = pt.get_element_type().as_any_type_enum() {
+                            let tmp = self.builder.build_alloca(st, "struct_arg_tmp").unwrap();
+                            self.builder.build_store(tmp, sv).unwrap();
+                            BasicValueEnum::PointerValue(tmp)
+                        } else {
+                            BasicValueEnum::StructValue(sv)
+                        }
+                    }
                     (BasicValueEnum::IntValue(iv), Some(BasicTypeEnum::IntType(et))) => {
                         if iv.get_type().get_bit_width() < et.get_bit_width() {
                             self.builder.build_int_s_extend(iv, *et, "arg_widen").unwrap().into()
