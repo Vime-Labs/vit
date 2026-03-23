@@ -4012,14 +4012,11 @@ impl<'ctx> Codegen<'ctx> {
             let val = {
                 let param_types = function.get_type().get_param_types();
                 match (val, param_types.get(i)) {
-                    (BasicValueEnum::StructValue(sv), Some(BasicTypeEnum::PointerType(pt))) => {
-                        if let inkwell::types::AnyTypeEnum::StructType(st) = pt.get_element_type().as_any_type_enum() {
-                            let tmp = self.builder.build_alloca(st, "struct_arg_tmp").unwrap();
-                            self.builder.build_store(tmp, sv).unwrap();
-                            BasicValueEnum::PointerValue(tmp)
-                        } else {
-                            BasicValueEnum::StructValue(sv)
-                        }
+                    (BasicValueEnum::StructValue(sv), Some(BasicTypeEnum::PointerType(_))) => {
+                        let st = sv.get_type();
+                        let tmp = self.builder.build_alloca(st, "struct_arg_tmp").unwrap();
+                        self.builder.build_store(tmp, sv).unwrap();
+                        BasicValueEnum::PointerValue(tmp)
                     }
                     (BasicValueEnum::IntValue(iv), Some(BasicTypeEnum::IntType(et))) => {
                         if iv.get_type().get_bit_width() < et.get_bit_width() {
