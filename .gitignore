@@ -1,0 +1,30 @@
+# Rust build artifacts
+target/
+
+# Compiled intermediates (gerados em /tmp, mas por via das dúvidas)
+*.ll
+*.o
+
+# SQLite databases gerados durante desenvolvimento
+*.db
+*.db-shm
+*.db-wal
+
+# Variáveis de ambiente
+.env
+.env.*
+
+# Binários compilados soltos na raiz
+/vit
+/a.out
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

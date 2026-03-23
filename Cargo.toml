@@ -1,0 +1,11 @@
+[package]
+name = "vit"
+version = "0.1.8"
+edition = "2021"
+
+[dependencies]
+inkwell = { version = "0.5", features = ["llvm18-0"], default-features = false }
+
+[[bin]]
+name = "vit"
+path = "src/main.rs"
