@@ -1,0 +1,27 @@
+// lib/uuid.vit — UUID v4 generator for Vit
+//
+// Usage: import "lib/uuid.vit";
+//
+// Zero external dependencies — uses /dev/urandom via uuid_shim.c.
+// The returned string is heap-allocated; call uuid_free() when done,
+// or leave it for the OS to reclaim at process exit (fine for handlers).
+
+link "uuid_shim.c";
+
+// ── raw extern bindings ───────────────────────────────────────────────────────
+
+extern fn vit_uuid_v4() -> str;
+extern fn vit_uuid_free(s: str) -> i32;
+
+// ── high-level wrappers ───────────────────────────────────────────────────────
+
+// Generates a random UUID v4.
+// Format: "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx" (36 chars, lowercase hex).
+fn uuid_v4() -> str {
+    return vit_uuid_v4();
+}
+
+// Frees the string returned by uuid_v4().
+fn uuid_free(s: str) -> i32 {
+    return vit_uuid_free(s);
+}

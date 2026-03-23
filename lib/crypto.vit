@@ -1,0 +1,58 @@
+// lib/crypto.vit — SHA-256, HMAC-SHA-256 and Base64 for Vit
+//
+// Usage: import "lib/crypto.vit";
+//
+// Zero external dependencies — everything is bundled in crypto_shim.c.
+//
+// Memory: sha256(), hmac_sha256(), base64_encode(), base64_decode() all
+// return heap-allocated strings. Call crypto_free() when done.
+// In practice, for short-lived web handlers this is fine to skip.
+
+link "crypto_shim.c";
+
+// ── raw extern bindings ───────────────────────────────────────────────────────
+
+extern fn vit_sha256(data: str) -> str;
+extern fn vit_hmac_sha256(key: str, data: str) -> str;
+extern fn vit_base64_encode(data: str) -> str;
+extern fn vit_base64_decode(data: str) -> str;
+extern fn vit_crypto_free(s: str) -> i32;
+
+// ── high-level wrappers ───────────────────────────────────────────────────────
+
+// Returns the SHA-256 hash of data as a lowercase hex string (64 chars).
+fn sha256(data: str) -> str {
+    return vit_sha256(data);
+}
+
+// Returns the HMAC-SHA-256 of data signed with key, as a lowercase hex string.
+// Used for: webhook signature verification (Stripe, GitHub), API auth.
+fn hmac_sha256(key: str, data: str) -> str {
+    return vit_hmac_sha256(key, data);
+}
+
+// Encodes data to Base64 (standard alphabet, with padding).
+fn base64_encode(data: str) -> str {
+    return vit_base64_encode(data);
+}
+
+// Decodes a Base64 string. Returns "" on invalid input.
+fn base64_decode(data: str) -> str {
+    return vit_base64_decode(data);
+}
+
+// Frees a string returned by sha256(), hmac_sha256(), base64_encode(),
+// or base64_decode(). Safe to call with any of those return values.
+fn crypto_free(s: str) -> i32 {
+    return vit_crypto_free(s);
+}
+
+// ── convenience: constant-time string comparison ──────────────────────────────
+// Avoids timing attacks when comparing hashes or tokens.
+// Returns 1 if equal, 0 otherwise.
+fn crypto_eq(a: str, b: str) -> i32 {
+    if strcmp(a, b) == 0 {
+        return 1;
+    }
+    return 0;
+}
