@@ -1,0 +1,38 @@
+// lib/fs.vit -- file system helpers for Vit
+//
+// Usage: import "lib/fs.vit";
+//
+// API:
+//   file_read(path)         -> str   reads full file, returns heap string or ""
+//   file_write(path, data)  -> i32   writes full file, returns 0 on success
+//   file_append(path, data) -> i32   appends to file, returns 0 on success
+//   file_exists(path)       -> i32   1 if path exists, 0 otherwise
+//   file_free(s)            -> i32   frees a string returned by file_read()
+
+link "fs_shim.c";
+
+extern fn vit_file_read(path: str) -> str;
+extern fn vit_file_write(path: str, data: str) -> i32;
+extern fn vit_file_append(path: str, data: str) -> i32;
+extern fn vit_file_exists(path: str) -> i32;
+extern fn vit_file_free(s: str) -> i32;
+
+fn file_read(path: str) -> str {
+    return vit_file_read(path);
+}
+
+fn file_write(path: str, data: str) -> i32 {
+    return vit_file_write(path, data);
+}
+
+fn file_append(path: str, data: str) -> i32 {
+    return vit_file_append(path, data);
+}
+
+fn file_exists(path: str) -> i32 {
+    return vit_file_exists(path);
+}
+
+fn file_free(s: str) -> i32 {
+    return vit_file_free(s);
+}

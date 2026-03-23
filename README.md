@@ -844,6 +844,36 @@ import "lib/net.vit";
 | `tcp_write`  | `(fd: i32, data: str, len: i32) -> i32` | Envia dados |
 | `tcp_close`  | `(fd: i32) -> i32` | Fecha conexão |
 
+### lib/fs.vit — Arquivos
+
+```vit
+import "lib/fs.vit";
+```
+
+| FunÃ§Ã£o | Assinatura | DescriÃ§Ã£o |
+|--------|-----------|-----------|
+| `file_read` | `(path: str) -> str` | LÃª arquivo inteiro, retorna `""` em erro |
+| `file_write` | `(path: str, data: str) -> i32` | Sobrescreve arquivo, `0` em sucesso |
+| `file_append` | `(path: str, data: str) -> i32` | Acrescenta ao fim do arquivo |
+| `file_exists` | `(path: str) -> i32` | `1` se o caminho existe |
+| `file_free` | `(s: str) -> i32` | Libera string retornada por `file_read()` |
+
+```vit
+import "lib/fs.vit";
+
+fn main() -> i32 {
+    file_append("app.log", "boot\n");
+
+    if file_exists("app.log") {
+        let contents: str = file_read("app.log");
+        print contents;
+        file_free(contents);
+    }
+
+    return 0;
+}
+```
+
 ### lib/http.vit — Servidor HTTP
 
 ```vit
@@ -853,10 +883,6 @@ import "lib/http.vit";
 Depende de `lib/net.vit` (importado automaticamente).
 
 #### Tipos
-
-`http_listen_fork()` adiciona concorrencia simples com modelo process-per-connection. Isso combina bem com o estado atual da Vit em Linux porque cada child fica com sua propria memoria, mas mutacoes em globais nao sao compartilhadas entre requests.
-
-`http_listen_fork()` adiciona concorrencia simples com modelo process-per-connection. Isso combina bem com o estado atual da Vit em Linux porque cada child fica com sua propria memoria, mas mutacoes em globais nao sao compartilhadas entre requests.
 
 ```vit
 struct Request {
