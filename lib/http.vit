@@ -136,6 +136,25 @@ fn http_header(req: Request, name: str) -> str {
     return "";
 }
 
+fn http_content_type(req: Request) -> str {
+    return http_header(req, "Content-Type");
+}
+
+fn http_has_body(req: Request) -> i32 {
+    if len(req.body) > 0 {
+        return 1;
+    }
+    return 0;
+}
+
+fn http_is_json(req: Request) -> i32 {
+    let content_type: str = http_content_type(req);
+    if str_pos(content_type, "application/json") >= 0 {
+        return 1;
+    }
+    return 0;
+}
+
 fn http_path_clean(req: Request) -> str {
     let q: i32 = str_pos(req.path, "?");
     if q < 0 {

@@ -846,6 +846,64 @@ import "lib/net.vit";
 
 ### lib/fs.vit — Arquivos
 
+### lib/json_parse.vit - Parse e validacao de JSON
+
+```vit
+import "lib/json_parse.vit";
+```
+
+#### Resultados tipados
+
+```vit
+struct JsonParseResult {
+    ok: i32,
+    msg: str,
+    json: str,
+}
+
+struct JsonStringResult {
+    ok: i32,
+    msg: str,
+    value: str,
+}
+```
+
+#### Helpers de parse
+
+| FunÃ§Ã£o | DescriÃ§Ã£o |
+|--------|-----------|
+| `json_parse(s)` | Parse cru; retorna handle opaco ou `""` |
+| `json_parse_result(s)` | Parse com `ok/msg/json` |
+| `json_parse_object(s)` | Garante que o topo e um objeto JSON |
+| `json_parse_array(s)` | Garante que o topo e um array JSON |
+| `json_free(j)` | Libera o handle criado por `json_parse*` |
+
+#### Helpers de campos obrigatorios
+
+| FunÃ§Ã£o | DescriÃ§Ã£o |
+|--------|-----------|
+| `json_require_str(j, key)` | Campo string obrigatorio com `ok/msg/value` |
+| `json_require_int(j, key)` | Campo inteiro obrigatorio com `ok/msg/value` |
+| `json_require_bool(j, key)` | Campo booleano obrigatorio com `ok/msg/value` |
+
+Exemplo idiomatico:
+
+```vit
+let parsed: JsonParseResult = json_parse_object(req.body);
+if parsed.ok == 0 {
+    return http_json_response(400, format("{\"error\":\"%s\"}", parsed.msg));
+}
+
+let name_field: JsonStringResult = json_require_str(parsed.json, "name");
+if name_field.ok == 0 {
+    json_free(parsed.json);
+    return http_json_response(400, format("{\"error\":\"%s\"}", name_field.msg));
+}
+
+let name: str = format("%s", name_field.value);
+json_free(parsed.json);
+```
+
 ```vit
 import "lib/fs.vit";
 ```
@@ -914,6 +972,9 @@ struct Response {
 | `http_route_apply(req, route)` | Preenche `req.params` para rotas com `:params` |
 | `http_path_clean(req)` | Path sem query string |
 | `http_header(req, name)` | Valor de header ou `""` |
+| `http_content_type(req)` | Valor do header `Content-Type` |
+| `http_has_body(req)` | `1` se a request tem body nao vazio |
+| `http_is_json(req)` | `1` se `Content-Type` contem `application/json` |
 | `http_method(req)` | Método HTTP |
 | `http_path(req)` | Path completo |
 | `http_body(req)` | Body da request |

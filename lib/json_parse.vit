@@ -1,19 +1,17 @@
-// lib/json_parse.vit — JSON parsing for Vit (powered by cJSON)
+// lib/json_parse.vit - JSON parsing for Vit (powered by cJSON)
 //
 // Usage: import "lib/json_parse.vit";
 //
-// cJSON is downloaded into ~/.vit/lib/ by install.sh (zero extra apt deps).
+// cJSON is downloaded into ~/.vit/lib/ by install.sh.
 // The compiler auto-compiles cJSON.c and json_parse_shim.c before linking.
 //
 // Memory model:
-//   json_parse()     → allocates; you own it, call json_free() when done.
-//   json_get_obj()   → returns pointer into parent; do NOT call json_free().
-//   json_arr_get()   → returns pointer into parent; do NOT call json_free().
+//   json_parse()   -> allocates; call json_free() when done.
+//   json_get_obj() -> pointer into parent; do not call json_free().
+//   json_arr_get() -> pointer into parent; do not call json_free().
 
 link "cJSON.c";
 link "json_parse_shim.c";
-
-// ── raw extern bindings ───────────────────────────────────────────────────────
 
 extern fn vit_json_parse(s: str) -> str;
 extern fn vit_json_free(j: str) -> i32;
@@ -41,27 +39,151 @@ extern fn vit_json_is_arr(j: str) -> i32;
 extern fn vit_json_to_str(j: str) -> str;
 extern fn vit_json_str_free(s: str) -> i32;
 
-// ── high-level wrappers ───────────────────────────────────────────────────────
+struct JsonParseResult {
+    ok: i32,
+    msg: str,
+    json: str,
+}
+
+struct JsonStringResult {
+    ok: i32,
+    msg: str,
+    value: str,
+}
+
+struct JsonIntResult {
+    ok: i32,
+    msg: str,
+    value: i32,
+}
+
+struct JsonBoolResult {
+    ok: i32,
+    msg: str,
+    value: i32,
+}
+
+fn json_parse_error(msg: str) -> JsonParseResult {
+    return JsonParseResult {
+        ok: 0,
+        msg: msg,
+        json: ""
+    };
+}
+
+fn json_parse_ok(j: str) -> JsonParseResult {
+    return JsonParseResult {
+        ok: 1,
+        msg: "",
+        json: j
+    };
+}
+
+fn json_string_error(msg: str) -> JsonStringResult {
+    return JsonStringResult {
+        ok: 0,
+        msg: msg,
+        value: ""
+    };
+}
+
+fn json_string_ok(value: str) -> JsonStringResult {
+    return JsonStringResult {
+        ok: 1,
+        msg: "",
+        value: value
+    };
+}
+
+fn json_int_error(msg: str) -> JsonIntResult {
+    return JsonIntResult {
+        ok: 0,
+        msg: msg,
+        value: 0
+    };
+}
+
+fn json_int_ok(value: i32) -> JsonIntResult {
+    return JsonIntResult {
+        ok: 1,
+        msg: "",
+        value: value
+    };
+}
+
+fn json_bool_error(msg: str) -> JsonBoolResult {
+    return JsonBoolResult {
+        ok: 0,
+        msg: msg,
+        value: 0
+    };
+}
+
+fn json_bool_ok(value: i32) -> JsonBoolResult {
+    return JsonBoolResult {
+        ok: 1,
+        msg: "",
+        value: value
+    };
+}
 
 // Parses a JSON string. Returns an opaque handle.
 // Always call json_free(j) when done to release memory.
-// Returns "" on parse error — check with json_valid(j).
+// Returns "" on parse error.
 fn json_parse(s: str) -> str {
     return vit_json_parse(s);
 }
 
 // Releases memory allocated by json_parse().
-// Do NOT call on handles returned by json_get_obj() or json_arr_get().
+// Do not call on handles returned by json_get_obj() or json_arr_get().
 fn json_free(j: str) -> i32 {
     return vit_json_free(j);
 }
 
-// Returns 1 if the handle is valid (parse succeeded), 0 otherwise.
+// Returns 1 if the handle is valid.
 fn json_valid(j: str) -> i32 {
     return vit_json_valid(j);
 }
 
-// ── object field access ───────────────────────────────────────────────────────
+// Parses JSON and returns a result with ok/msg/json.
+// Call json_free(res.json) when res.ok != 0 and you are done with it.
+fn json_parse_result(s: str) -> JsonParseResult {
+    let j: str = json_parse(s);
+    if strcmp(j, "") == 0 {
+        return json_parse_error("Invalid JSON body");
+    }
+    if json_valid(j) == 0 {
+        json_free(j);
+        return json_parse_error("Invalid JSON body");
+    }
+    return json_parse_ok(j);
+}
+
+// Parses JSON and ensures the top-level value is an object.
+fn json_parse_object(s: str) -> JsonParseResult {
+    let res: JsonParseResult = json_parse_result(s);
+    if res.ok == 0 {
+        return res;
+    }
+    if json_is_obj(res.json) == 0 {
+        json_free(res.json);
+        return json_parse_error("JSON body must be an object");
+    }
+    return res;
+}
+
+// Parses JSON and ensures the top-level value is an array.
+fn json_parse_array(s: str) -> JsonParseResult {
+    let res: JsonParseResult = json_parse_result(s);
+    if res.ok == 0 {
+        return res;
+    }
+    if json_is_arr(res.json) == 0 {
+        json_free(res.json);
+        return json_parse_error("JSON body must be an array");
+    }
+    return res;
+}
 
 // Returns 1 if the key exists in object j.
 fn json_has(j: str, key: str) -> i32 {
@@ -89,12 +211,37 @@ fn json_get_bool(j: str, key: str) -> i32 {
 }
 
 // Returns a handle to a nested object or array.
-// Do NOT call json_free() on the returned handle.
+// Do not call json_free() on the returned handle.
 fn json_get_obj(j: str, key: str) -> str {
     return vit_json_get_obj(j, key);
 }
 
-// ── array access ──────────────────────────────────────────────────────────────
+// Returns a required string field.
+// The returned value points into j, so keep j alive while using it.
+fn json_require_str(j: str, key: str) -> JsonStringResult {
+    if json_has(j, key) == 0 {
+        return json_string_error(format("Missing field: %s", key));
+    }
+    let value: str = json_get_str(j, key);
+    if strcmp(value, "") == 0 {
+        return json_string_error(format("Field '%s' must be a non-empty string", key));
+    }
+    return json_string_ok(value);
+}
+
+fn json_require_int(j: str, key: str) -> JsonIntResult {
+    if json_has(j, key) == 0 {
+        return json_int_error(format("Missing field: %s", key));
+    }
+    return json_int_ok(json_get_int(j, key));
+}
+
+fn json_require_bool(j: str, key: str) -> JsonBoolResult {
+    if json_has(j, key) == 0 {
+        return json_bool_error(format("Missing field: %s", key));
+    }
+    return json_bool_ok(json_get_bool(j, key));
+}
 
 // Returns the number of elements in a JSON array.
 fn json_arr_len(j: str) -> i32 {
@@ -102,7 +249,7 @@ fn json_arr_len(j: str) -> i32 {
 }
 
 // Returns a handle to the element at index i.
-// Do NOT call json_free() on the returned handle.
+// Do not call json_free() on the returned handle.
 fn json_arr_get(j: str, i: i32) -> str {
     return vit_json_arr_get(j, i);
 }
@@ -117,8 +264,6 @@ fn json_arr_get_int(j: str, i: i32) -> i32 {
     return vit_json_arr_get_int(j, i);
 }
 
-// ── type checks ───────────────────────────────────────────────────────────────
-
 fn json_is_null(j: str) -> i32  { return vit_json_is_null(j); }
 fn json_is_str(j: str) -> i32   { return vit_json_is_str(j); }
 fn json_is_int(j: str) -> i32   { return vit_json_is_int(j); }
@@ -126,10 +271,8 @@ fn json_is_bool(j: str) -> i32  { return vit_json_is_bool(j); }
 fn json_is_obj(j: str) -> i32   { return vit_json_is_obj(j); }
 fn json_is_arr(j: str) -> i32   { return vit_json_is_arr(j); }
 
-// ── debug ─────────────────────────────────────────────────────────────────────
-
 // Serializes any JSON handle back to a string (unformatted).
-// The returned str is heap-allocated — call json_str_free() when done.
+// The returned str is heap-allocated; call json_str_free() when done.
 fn json_to_str(j: str) -> str {
     return vit_json_to_str(j);
 }
