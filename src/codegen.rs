@@ -3627,6 +3627,26 @@ impl<'ctx> Codegen<'ctx> {
 
         match (lhs, rhs) {
             (BasicValueEnum::IntValue(l), BasicValueEnum::IntValue(r)) => {
+                // LLVM requires same-width integer operands for arithmetic/comparisons.
+                // Vit allows mixing i32/i64, so widen the narrower operand.
+                let (l, r) = {
+                    let lb = l.get_type().get_bit_width();
+                    let rb = r.get_type().get_bit_width();
+                    if lb == rb {
+                        (l, r)
+                    } else if lb < rb {
+                        (
+                            self.builder.build_int_s_extend(l, r.get_type(), "lhs_widen").unwrap(),
+                            r,
+                        )
+                    } else {
+                        (
+                            l,
+                            self.builder.build_int_s_extend(r, l.get_type(), "rhs_widen").unwrap(),
+                        )
+                    }
+                };
+
                 let result = match op {
                     BinaryOp::Add => self.builder.build_int_add(l, r, "add").unwrap(),
                     BinaryOp::Sub => self.builder.build_int_sub(l, r, "sub").unwrap(),
