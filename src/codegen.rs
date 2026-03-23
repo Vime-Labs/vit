@@ -3204,24 +3204,34 @@ impl<'ctx> Codegen<'ctx> {
         // len(x) — array: compile-time size; str: strlen at runtime
         if name == "len" {
             if arguments.len() != 1 { return Err("len() takes 1 argument".to_string()); }
-            let arr_name = match &arguments[0] {
-                Expression::Identifier(n) => n.clone(),
-                _ => return Err("len() argument must be a variable".to_string()),
-            };
-            let (ptr, typ) = self.variables.get(&arr_name).copied()
-                .ok_or_else(|| format!("Undefined variable: {}", arr_name))?;
-            return match typ {
-                BasicTypeEnum::ArrayType(at) =>
-                    Ok(self.context.i32_type().const_int(at.len() as u64, false).into()),
-                BasicTypeEnum::PointerType(_) => {
+            if let Expression::Identifier(arr_name) = &arguments[0] {
+                let (ptr, typ) = self.variables.get(arr_name).copied()
+                    .ok_or_else(|| format!("Undefined variable: {}", arr_name))?;
+                match typ {
+                    BasicTypeEnum::ArrayType(at) => {
+                        return Ok(self.context.i32_type().const_int(at.len() as u64, false).into());
+                    }
+                    BasicTypeEnum::PointerType(_) => {
+                        let strlen = self.module.get_function("strlen").unwrap();
+                        let s = self.builder.build_load(typ, ptr, arr_name).unwrap().into_pointer_value();
+                        let n = self.builder.build_call(strlen, &[s.into()], "slen").unwrap()
+                            .try_as_basic_value().left().unwrap().into_int_value();
+                        return Ok(self.builder.build_int_truncate_or_bit_cast(n, self.context.i32_type(), "len").unwrap().into());
+                    }
+                    _ => {}
+                }
+            }
+
+            let val = self.generate_expression(&arguments[0])?;
+            match val {
+                BasicValueEnum::PointerValue(s) => {
                     let strlen = self.module.get_function("strlen").unwrap();
-                    let s = self.builder.build_load(typ, ptr, &arr_name).unwrap().into_pointer_value();
                     let n = self.builder.build_call(strlen, &[s.into()], "slen").unwrap()
                         .try_as_basic_value().left().unwrap().into_int_value();
                     Ok(self.builder.build_int_truncate_or_bit_cast(n, self.context.i32_type(), "len").unwrap().into())
                 }
-                _ => Err("len() requires an array or str variable".to_string()),
-            };
+                _ => Err("len() requires an array or str value".to_string()),
+            }
         }
 
         // str_to_int(s), str_to_float(s)
