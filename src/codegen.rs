@@ -180,7 +180,7 @@ impl<'ctx> Codegen<'ctx> {
                 .unwrap()
                 .into_pointer_value();
             // Null-terminate so strbuf_to_str() is safe on an empty buffer
-            self.builder.build_store(i8_type.const_int(0, false), data).unwrap();
+            self.builder.build_store(data, i8_type.const_int(0, false)).unwrap();
 
             let mut agg = strbuf_type.const_zero();
             agg = self.builder.build_insert_value(agg, data, 0, "s0").unwrap().into_struct_value();
