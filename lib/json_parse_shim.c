@@ -7,6 +7,7 @@
 // They are compiled separately via `link "cJSON.c"` in json_parse.vit.
 
 #include "cJSON.h"
+#include <stdlib.h>
 #include <string.h>
 
 static const char* safe_str(const char* s) {
