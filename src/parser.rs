@@ -696,6 +696,18 @@ impl Parser {
                     Ok(Expression::Call { name, arguments })
                 } else if matches!(self.current().typ, TokenType::LBrace)
                     && name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+                    && matches!(
+                        self.peek(1).map(|t| &t.typ),
+                        Some(TokenType::RBrace)            // Foo {}
+                            | Some(TokenType::Identifier(_)) // Foo { field: ...
+                    )
+                    && (matches!(
+                        self.peek(1).map(|t| &t.typ),
+                        Some(TokenType::RBrace)
+                    ) || matches!(
+                        self.peek(2).map(|t| &t.typ),
+                        Some(TokenType::Colon)
+                    ))
                 {
                     // Struct literal: Name { field: val, ... }
                     self.advance(); // consume '{'
