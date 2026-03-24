@@ -1165,6 +1165,238 @@ fn main() -> i32 {
 PORT=9090 DATABASE_URL=/data/prod.db ./meu_app
 ```
 
+### lib/time.vit — Data e hora
+
+```vit
+import "lib/time.vit";
+```
+
+Sem dependências externas — implementado em `time_shim.c` (POSIX). Todos os timestamps são Unix time (segundos desde 1970-01-01T00:00:00Z). `time_format` e `time_parse` operam em UTC.
+
+| Função | Descrição |
+|--------|-----------|
+| `time_now() -> i64` | Timestamp atual em segundos |
+| `time_now_ms() -> i64` | Timestamp atual em milissegundos |
+| `time_format(ts, fmt) -> str` | Formata timestamp UTC com padrão strftime |
+| `time_format_local(ts, fmt) -> str` | Formata timestamp no fuso local |
+| `time_parse(s) -> i64` | Parseia string ISO-8601 para Unix timestamp; retorna `-1` em falha |
+| `time_sleep(ms)` | Pausa por `ms` milissegundos |
+| `time_free(s)` | Libera string retornada por `time_format` / `time_format_local` |
+
+Padrões comuns para `time_format`:
+- `"%Y-%m-%d"` → `"2025-03-23"`
+- `"%Y-%m-%dT%H:%M:%SZ"` → `"2025-03-23T14:05:00Z"`
+- `"%H:%M:%S"` → `"14:05:00"`
+
+```vit
+import "lib/time.vit";
+
+fn main() -> i32 {
+    let ts: i64  = time_now();
+    let iso: str = time_format(ts, "%Y-%m-%dT%H:%M:%SZ");
+    print iso;
+    time_free(iso);
+    return 0;
+}
+```
+
+### lib/uuid.vit — UUID v4
+
+```vit
+import "lib/uuid.vit";
+```
+
+Sem dependências externas — usa `/dev/urandom` via `uuid_shim.c`.
+
+| Função | Descrição |
+|--------|-----------|
+| `uuid_v4() -> str` | Gera UUID aleatório v4 (`xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx`) |
+| `uuid_free(s)` | Libera string retornada por `uuid_v4()` |
+
+```vit
+import "lib/uuid.vit";
+
+fn main() -> i32 {
+    let id: str = uuid_v4();
+    print id;
+    uuid_free(id);
+    return 0;
+}
+```
+
+### lib/http_client.vit — Cliente HTTP
+
+```vit
+import "lib/http_client.vit";
+```
+
+**Dependência:** `sudo apt install libcurl4-openssl-dev`
+
+Powered by libcurl. Cada resposta é alocada no heap — chame `http_client_free(res)` em servidores de longa duração para evitar vazamento de memória. `http_client_status()` usa estado global e não é thread-safe com fork.
+
+| Função | Descrição |
+|--------|-----------|
+| `http_get(url) -> str` | GET — retorna corpo da resposta |
+| `http_post(url, body) -> str` | POST com `application/x-www-form-urlencoded` |
+| `http_post_json(url, body) -> str` | POST com `application/json` |
+| `http_put_json(url, body) -> str` | PUT com `application/json` |
+| `http_patch_json(url, body) -> str` | PATCH com `application/json` |
+| `http_delete(url) -> str` | DELETE — retorna corpo da resposta |
+| `http_client_status() -> i32` | Status HTTP da última requisição (ex: `200`, `404`) |
+| `http_client_free(res)` | Libera corpo de resposta alocado pelo shim |
+
+```vit
+import "lib/http_client.vit";
+import "lib/json_parse.vit";
+
+fn main() -> i32 {
+    let body: str = http_get("https://api.exemplo.com/items");
+    let status: i32 = http_client_status();
+    if status == 200 {
+        let res: JsonParseResult = json_parse_object(body);
+        if res.ok == 1 {
+            print json_get_str(res.json, "name");
+            json_free(res.json);
+        }
+    }
+    http_client_free(body);
+    return 0;
+}
+```
+
+### lib/base64.vit — Base64
+
+```vit
+import "lib/base64.vit";
+```
+
+Sem dependências externas — implementado em `base64_shim.c`. As strings retornadas são heap-allocated; chame `base64_free()` quando não precisar mais.
+
+| Função | Descrição |
+|--------|-----------|
+| `base64_encode(data) -> str` | Codifica em Base64 (alfabeto padrão, com `=`) |
+| `base64_decode(data) -> str` | Decodifica Base64; retorna `""` em input inválido |
+| `base64_free(s)` | Libera string retornada por `encode` ou `decode` |
+
+```vit
+import "lib/base64.vit";
+
+fn main() -> i32 {
+    let enc: str = base64_encode("hello world");
+    let dec: str = base64_decode(enc);
+    print enc;
+    print dec;
+    base64_free(enc);
+    base64_free(dec);
+    return 0;
+}
+```
+
+### lib/crypto.vit — SHA-256 e HMAC
+
+```vit
+import "lib/crypto.vit";
+```
+
+Sem dependências externas — tudo embutido em `crypto_shim.c` (também inclui Base64). As strings retornadas são heap-allocated; chame `crypto_free()` quando não precisar mais.
+
+| Função | Descrição |
+|--------|-----------|
+| `sha256(data) -> str` | Hash SHA-256 como hex lowercase (64 chars) |
+| `hmac_sha256(key, data) -> str` | HMAC-SHA-256 como hex lowercase |
+| `base64_encode(data) -> str` | Codifica em Base64 |
+| `base64_decode(data) -> str` | Decodifica Base64 |
+| `crypto_free(s)` | Libera string retornada por qualquer função acima |
+| `crypto_eq(a, b) -> i32` | Compara strings em tempo constante (evita timing attacks) |
+
+```vit
+import "lib/crypto.vit";
+
+fn main() -> i32 {
+    let hash: str = sha256("hello");
+    print hash;
+    crypto_free(hash);
+
+    let sig: str = hmac_sha256("my-secret", "payload");
+    if crypto_eq(sig, "expected-sig") == 1 {
+        print "valid";
+    }
+    crypto_free(sig);
+    return 0;
+}
+```
+
+### lib/postgres.vit — PostgreSQL
+
+```vit
+import "lib/postgres.vit";
+```
+
+**Dependência:** `sudo apt install libpq-dev`
+
+Powered by libpq. Diferente do SQLite, o libpq retorna **todas as linhas de uma vez** em um handle de resultado. Itere de `0` até `postgres_nrows(res) - 1`. Sempre chame `postgres_free(res)` quando terminar.
+
+| Função | Descrição |
+|--------|-----------|
+| `postgres_connect(conninfo) -> str` | Conecta ao banco; retorna handle |
+| `postgres_ok(conn) -> i32` | `1` se conexão está aberta e saudável |
+| `postgres_close(conn)` | Fecha conexão e libera memória |
+| `postgres_errmsg(conn) -> str` | Última mensagem de erro da conexão |
+| `postgres_exec(conn, sql) -> i32` | Executa SQL sem retorno de linhas (`CREATE`, `INSERT`, ...); retorna `1` em sucesso |
+| `postgres_query(conn, sql) -> str` | Executa `SELECT`; retorna handle de resultado |
+| `postgres_result_ok(res) -> i32` | `1` se o resultado é válido |
+| `postgres_result_errmsg(res) -> str` | Mensagem de erro do resultado |
+| `postgres_nrows(res) -> i32` | Número de linhas no resultado |
+| `postgres_ncols(res) -> i32` | Número de colunas no resultado |
+| `postgres_col(res, row, col) -> str` | Valor texto em (row, col) — ambos 0-based |
+| `postgres_col_int(res, row, col) -> i32` | Valor inteiro em (row, col) |
+| `postgres_is_null(res, row, col) -> i32` | `1` se o valor é NULL |
+| `postgres_col_name(res, col) -> str` | Nome da coluna (0-based) |
+| `postgres_free(res)` | Libera handle de resultado |
+| `postgres_param(val) -> i32` | Adiciona parâmetro para query parametrizada (`$1`, `$2`, ...) |
+| `postgres_query_p(conn, sql, n) -> str` | `SELECT` parametrizado com `n` parâmetros |
+| `postgres_exec_p(conn, sql, n) -> i32` | DML parametrizado com `n` parâmetros |
+
+```vit
+import "lib/postgres.vit";
+
+let db: str;
+
+fn main() -> i32 {
+    db = postgres_connect("postgresql://user:pass@localhost:5432/mydb");
+    if postgres_ok(db) == 0 {
+        print postgres_errmsg(db);
+        return 1;
+    }
+
+    // Query simples
+    let res: str = postgres_query(db, "SELECT id, name FROM items LIMIT 10");
+    if postgres_result_ok(res) == 0 {
+        print postgres_result_errmsg(res);
+        postgres_free(res);
+        return 1;
+    }
+    let i: i32 = 0;
+    while i < postgres_nrows(res) {
+        print postgres_col(res, i, 0);
+        print postgres_col(res, i, 1);
+        i = i + 1;
+    }
+    postgres_free(res);
+
+    // Query parametrizada
+    postgres_param("42");
+    let row: str = postgres_query_p(db, "SELECT name FROM items WHERE id = $1", 1);
+    if postgres_result_ok(row) == 1 {
+        print postgres_col(row, 0, 0);
+    }
+    postgres_free(row);
+
+    postgres_close(db);
+    return 0;
+}
+```
+
 ---
 
 ## Limitações conhecidas
