@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -n '59,1957p' /c/Users/email/vime/lab/vit/vit-rs/src/codegen.rs)",
+      "Read(//tmp/**)"
+    ]
+  }
+}
