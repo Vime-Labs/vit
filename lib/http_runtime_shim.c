@@ -4,6 +4,10 @@
 #include <string.h>
 #include <sys/socket.h>
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
 static int parse_content_length(const char* buf, int headers_end) {
     const char* p = buf;
     const char* end = buf + headers_end;
@@ -97,7 +101,7 @@ int vit_http_send_all(int fd, const char* data, int len) {
     int sent = 0;
 
     while (sent < len) {
-        int n = (int)send(fd, data + sent, (size_t)(len - sent), 0);
+        int n = (int)send(fd, data + sent, (size_t)(len - sent), MSG_NOSIGNAL);
         if (n <= 0) {
             return sent > 0 ? sent : n;
         }
