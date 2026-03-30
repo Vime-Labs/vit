@@ -1112,6 +1112,7 @@ O shim C é compilado automaticamente via `link "sqlite_shim.c"`.
 | `sqlite_exec(db, sql)` | Executa SQL sem parâmetros |
 | `sqlite_prepare(db, sql)` | Compila statement (`?1`, `?2`, ...) |
 | `sqlite_bind(stmt, idx, val)` | Vincula parâmetro texto (1-based) |
+| `sqlite_bind_int(stmt, idx, val)` | Vincula parâmetro inteiro (1-based) |
 | `sqlite_step(stmt)` | Avança linha — retorna `SQLITE_ROW` ou `SQLITE_DONE` |
 | `sqlite_col_text(stmt, col)` | Valor texto da coluna (0-based) |
 | `sqlite_col_int(stmt, col)` | Valor inteiro da coluna |

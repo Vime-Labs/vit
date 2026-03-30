@@ -21,6 +21,7 @@ extern fn vit_sqlite_close(db: str) -> i32;
 extern fn vit_sqlite_exec(db: str, sql: str) -> i32;
 extern fn vit_sqlite_prepare(db: str, sql: str) -> str;
 extern fn vit_sqlite_bind_text(stmt: str, idx: i32, val: str) -> i32;
+extern fn vit_sqlite_bind_int(stmt: str, idx: i32, val: i32) -> i32;
 extern fn vit_sqlite_step(stmt: str) -> i32;
 extern fn vit_sqlite_column_text(stmt: str, col: i32) -> str;
 extern fn vit_sqlite_column_int(stmt: str, col: i32) -> i32;
@@ -54,6 +55,11 @@ fn sqlite_prepare(db: str, sql: str) -> str {
 // Binds a text value to placeholder ?idx (1-based).
 fn sqlite_bind(stmt: str, idx: i32, val: str) -> i32 {
     return vit_sqlite_bind_text(stmt, idx, val);
+}
+
+// Binds an integer value to placeholder ?idx (1-based).
+fn sqlite_bind_int(stmt: str, idx: i32, val: i32) -> i32 {
+    return vit_sqlite_bind_int(stmt, idx, val);
 }
 
 // Advances the statement by one row.

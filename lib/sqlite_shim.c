@@ -36,6 +36,10 @@ int vit_sqlite_bind_text(char* stmt, int idx, const char* val) {
     return sqlite3_bind_text((sqlite3_stmt*)stmt, idx, val, -1, SQLITE_TRANSIENT);
 }
 
+int vit_sqlite_bind_int(char* stmt, int idx, int val) {
+    return sqlite3_bind_int((sqlite3_stmt*)stmt, idx, val);
+}
+
 int vit_sqlite_step(char* stmt) {
     return sqlite3_step((sqlite3_stmt*)stmt);
 }
