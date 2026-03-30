@@ -9,6 +9,7 @@ link "http_runtime_shim.c";
 
 extern fn vit_http_read_request(fd: i32, max_bytes: i32) -> str;
 extern fn vit_http_send_all(fd: i32, data: str, len: i32) -> i32;
+extern fn __vit_req_track(ptr: str) -> str;
 
 struct Request {
     method: str,
@@ -38,11 +39,11 @@ fn http_recv(fd: i32, buf: str, size: i32) -> i32 {
 }
 
 fn http_read(fd: i32) -> str {
-    return vit_http_read_request(fd, 1048576);
+    return __vit_req_track(vit_http_read_request(fd, 1048576));
 }
 
 fn http_read_max(fd: i32, max_bytes: i32) -> str {
-    return vit_http_read_request(fd, max_bytes);
+    return __vit_req_track(vit_http_read_request(fd, max_bytes));
 }
 
 fn http_send(fd: i32, response: str) -> i32 {
@@ -231,15 +232,6 @@ fn http_param(req: Request, key: str) -> str {
 }
 
 fn http_request_free(req: Request) -> i32 {
-    if len(req.method) > 0 {
-        free(req.method);
-    }
-    if len(req.path) > 0 {
-        free(req.path);
-    }
-    if len(req.body) > 0 {
-        free(req.body);
-    }
     map_free(req.headers);
     map_free(req.params);
     return 0;
